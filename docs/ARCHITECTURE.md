@@ -21,5 +21,5 @@ Providers (N primary accounts + M fallback)
 
 ## Moving to another device
 
-Copy the repo, fill `proxy/config.json` and `seed/seed.json`, then `./scripts/start.sh`.
+Copy the repo, connect your providers in OmniRoute (dashboard :20128), get the connection IDs with `scripts/list-conns.sh`, fill `proxy/config.json` and `seed/seed.json`, then `./scripts/start.sh`.
 To replace the gateway later, only `GATEWAY_URL` and `scripts/bootstrap.sh` change.

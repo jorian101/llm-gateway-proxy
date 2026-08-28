@@ -13,6 +13,27 @@ No provider names, keys or connection IDs are committed. All secrets stay in `pr
 
 The proxy is the single choke point. OmniRoute handles per-provider routing; the proxy adds cross-combo exclusivity and observability.
 
+## Prerequisites — where the connection IDs come from
+
+The proxy needs the OmniRoute **connection IDs** of your provider accounts. They
+are not created by this repo — you must first hook up your accounts in OmniRoute:
+
+1. Start the gateway and open the dashboard: `./scripts/start.sh` → http://127.0.0.1:20128
+2. **Endpoints → create an API key**, set it in `.env` as `GATEWAY_API_KEY`.
+3. **Providers → connect your accounts** (OAuth or API key). Each connected
+   account gets a connection ID.
+4. Discover them with the helper script:
+
+```bash
+./scripts/list-conns.sh         # list every connection ID + provider + name
+./scripts/list-conns.sh --config  # print proxy/config.json pre-filled with real IDs
+```
+
+5. Copy the output into `proxy/config.json` (gitignored, never committed).
+   Keys must stay as-is: `nvidia_conns.{nim-1,nim-2,nim-3}` and
+   `vision_conns.{openrouter,groq,gemini-1,gemini-2,mistral}` — these are the
+   exact keys `proxy/server.py` reads.
+
 ## Quickstart
 
 ```bash
@@ -46,7 +67,7 @@ cp .env.example .env                            # fill GATEWAY_API_KEY
 
 ## Moving to another device
 
-Copy the repo, fill `proxy/config.json` and `seed/seed.json`, then `./scripts/start.sh`. To replace OmniRoute later, only `GATEWAY_URL` and `scripts/bootstrap.sh` need to change.
+Copy the repo, connect your providers in OmniRoute (dashboard :20128), run `./scripts/list-conns.sh --config` to get the connection IDs, fill `proxy/config.json` and `seed/seed.json`, then `./scripts/start.sh`. To replace OmniRoute later, only `GATEWAY_URL` and `scripts/bootstrap.sh` need to change.
 
 ## Docs
 
