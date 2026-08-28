@@ -4,7 +4,7 @@
 CLI (opencode / agy / codex ...)
   │  X-Session-Id
   ▼
-Proxy (proxy/server.py)  20129 combo-a  20133 combo-b
+Proxy (proxy/server.py)  20129 nvidia-start  20133 nvidia-vision
   │  _inflight per conn_id (shared), _disabled TTL, retry
   ▼
 Gateway (omniroute)  20128  combos: priority + weight + failoverBeforeRetry
@@ -15,6 +15,7 @@ Providers (N primary accounts + M fallback)
 
 - **Combos** define ordered hierarchies: 5 top models × 3 accounts, then second cycle, then fallbacks.
 - **Proxy** is the single choke point: `pick_free_connection` skips busy `_inflight` and `_disabled` entries, waits 3s for a primary slot before using fallback. Fallback only when primary full or disabled.
+- **`proxy/config.json` → `port_combo`** values MUST be keys of the proxy's internal `HIERARCHIES` (`nvidia-start`, `nvidia-vision`). Anything else (e.g. a stray `combo-a`) yields an empty hierarchy → `503 ALL_BUSY` on that port.
 - **Gateway** does its own failover; proxy adds cross-combo exclusivity and observability.
 - Portable: `proxy/config.json` + `seed/seed.json` + `docker-compose.yml` + `scripts/bootstrap.sh`.
 

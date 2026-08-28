@@ -28,8 +28,8 @@ cp .env.example .env                            # fill GATEWAY_API_KEY
 ## Ports
 
 - `20128` OmniRoute gateway
-- `20129` combo-a (text/agentic)
-- `20133` combo-b (vision)
+- `20129` combo `nvidia-start` (text/agentic)
+- `20133` combo `nvidia-vision` (vision)
 
 ## Proxy behaviour
 
@@ -41,7 +41,7 @@ cp .env.example .env                            # fill GATEWAY_API_KEY
 
 ```bash
 ./scripts/setup-opencode.sh   # prints snippet for ~/.config/opencode/opencode.json
-# then Ctrl+x m → Gateway Combo A / auto
+# then Ctrl+x m → Gateway Combo nvidia-start / auto
 ```
 
 ## Moving to another device

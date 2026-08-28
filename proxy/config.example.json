@@ -2,8 +2,8 @@
   "target": "http://127.0.0.1:20128/v1",
   "api_key": "<GATEWAY_API_KEY>",
   "port_combo": {
-    "20129": "combo-a",
-    "20133": "combo-b"
+    "20129": "nvidia-start",
+    "20133": "nvidia-vision"
   },
   "nvidia_conns": {
     "primary-1": "<CONN_ID_1>",
