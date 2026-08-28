@@ -1,0 +1,19 @@
+# Portable OmniRoute compose - copy to new device with proxy.config.json + seed.json
+services:
+  omniroute:
+    image: ghcr.io/omniroute/omniroute:v3.8.49
+    container_name: omniroute
+    restart: unless-stopped
+    ports:
+      - "20128:20128"
+    volumes:
+      - omniroute_data:/app/data
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:20128/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  omniroute_data:

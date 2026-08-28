@@ -1,0 +1,22 @@
+# secrets - never commit
+proxy/config.json
+seed/seed.json
+.env
+
+# runtime
+/tmp/
+*.log
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# legacy with real IDs
+legacy/
+
+# local engram
+.engram/

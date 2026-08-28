@@ -1,0 +1,20 @@
+{
+  "target": "http://127.0.0.1:20128/v1",
+  "api_key": "<GATEWAY_API_KEY>",
+  "port_combo": {
+    "20129": "combo-a",
+    "20133": "combo-b"
+  },
+  "nvidia_conns": {
+    "primary-1": "<CONN_ID_1>",
+    "primary-2": "<CONN_ID_2>",
+    "primary-3": "<CONN_ID_3>"
+  },
+  "vision_conns": {
+    "fallback-1": "<CONN_ID_V1>",
+    "fallback-2": "<CONN_ID_V2>",
+    "fallback-3": "<CONN_ID_V3>",
+    "fallback-4": "<CONN_ID_V4>",
+    "fallback-5": "<CONN_ID_V5>"
+  }
+}

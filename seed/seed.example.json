@@ -1,0 +1,77 @@
+{
+  "combos": [
+    {
+      "name": "nvidia-start",
+      "strategy": "priority",
+      "config": {
+        "maxRetries": 0,
+        "failoverBeforeRetry": true
+      },
+      "models": [
+        {
+          "id": "ns-00-kimi-k3",
+          "kind": "model",
+          "model": "example/kimi-k3",
+          "providerId": "example",
+          "connectionId": "<CONN_ID>",
+          "weight": 100
+        },
+        {
+          "id": "ns-01-kimi-k3",
+          "kind": "model",
+          "model": "example/kimi-k3",
+          "providerId": "example",
+          "connectionId": "<CONN_ID>",
+          "weight": 100
+        },
+        {
+          "note": "add more models following the same pattern - see docs/ARCHITECTURE.md"
+        }
+      ]
+    },
+    {
+      "name": "openrouter-fallback",
+      "models_count": 1,
+      "note": "example entry"
+    },
+    {
+      "name": "cf-groq",
+      "models_count": 9,
+      "note": "example entry"
+    },
+    {
+      "name": "z-mistral-sambanova",
+      "models_count": 14,
+      "note": "example entry"
+    },
+    {
+      "name": "nvidia-vision",
+      "strategy": "priority",
+      "config": {
+        "maxRetries": 0,
+        "failoverBeforeRetry": true
+      },
+      "models": [
+        {
+          "id": "v1-n1-llama90b",
+          "kind": "model",
+          "model": "example/llama-3.2-90b-vision-instruct",
+          "providerId": "example",
+          "connectionId": "<CONN_ID>",
+          "weight": 100
+        },
+        {
+          "id": "v1-n1-nemoot",
+          "kind": "model",
+          "model": "example/nemotron-3-nano-omni-30b-a3b-reasoning",
+          "providerId": "example",
+          "connectionId": "<CONN_ID>",
+          "weight": 95
+        },
+        {
+          "note": "add more models following the same pattern - see docs/ARCHITECTURE.md"
+        }
+      ]
+    }
+  ]
+}
