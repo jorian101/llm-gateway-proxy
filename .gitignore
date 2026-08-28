@@ -20,3 +20,6 @@ legacy/
 
 # local engram
 .engram/
+
+# auto-generated (gentle-ai skill registry)
+.atl/
