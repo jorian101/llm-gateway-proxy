@@ -40,78 +40,32 @@ VISION_CONNS = _cfg.get("vision_conns", {
 _http_session = requests.Session()
 _http_session.headers.update({"Connection": "keep-alive"})
 
-# 5 top models
-NVIDIA_HIERARCHY = [
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 30),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/openai/gpt-oss-120b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/mistralai/mistral-large-3-675b-instruct-2512", 30),
-    # Externos solo si >3 sesiones y wait falla
-    ("openrouter", VISION_CONNS["openrouter"], "openrouter/auto", 20),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-scout-17b-16e-instruct", 15),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-maverick-17b-128e-instruct", 14),
-    ("gemini", VISION_CONNS["gemini-1"], "gemini/gemini-2.5-flash", 10),
-    ("gemini", VISION_CONNS["gemini-2"], "gemini/gemini-3.5-flash", 9),
-    ("mistral", VISION_CONNS["mistral"], "mistral/pixtral-12b-2409", 8),
-]
+# Hierarchies loaded from proxy/hierarchies.json (gitignored) if present,
+# else fall back to proxy/hierarchies.example.json (committed). Compact format:
+#   { "nvidia-start": [ { "model": "...", "weight": 90, "conns": ["nim-1","nim-2","nim-3"] }, ... ] }
+# Each entry expands to one tuple per conn alias. Aliases map to conn IDs via
+# NVIDIA_CONNS / VISION_CONNS. To add/remove a model, edit hierarchies.json.
+HIERARCHIES_FILE = os.path.join(os.path.dirname(__file__), "hierarchies.json")
+EXAMPLE_FILE = os.path.join(os.path.dirname(__file__), "hierarchies.example.json")
 
-VISION_HIERARCHY = [
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("openrouter", VISION_CONNS["openrouter"], "openrouter/auto", 50),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-scout-17b-16e-instruct", 40),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-maverick-17b-128e-instruct", 35),
-    ("gemini", VISION_CONNS["gemini-1"], "gemini/gemini-2.5-flash", 30),
-    ("gemini", VISION_CONNS["gemini-2"], "gemini/gemini-3.5-flash", 25),
-    ("mistral", VISION_CONNS["mistral"], "mistral/pixtral-12b-2409", 20),
-]
+CONN_BY_ALIAS = {**NVIDIA_CONNS, **VISION_CONNS}
 
-HIERARCHIES = {"nvidia-start": NVIDIA_HIERARCHY, "nvidia-vision": VISION_HIERARCHY}
+def _provider_for_alias(alias):
+    return "nvidia" if alias.startswith("nim-") else alias.split("-")[0]
+
+def _expand_hierarchy(entries):
+    out = []
+    for e in entries:
+        for alias in e["conns"]:
+            out.append((_provider_for_alias(alias), CONN_BY_ALIAS[alias], e["model"], e["weight"]))
+    return out
+
+def _load_hierarchies(path):
+    with open(path) as f: data = json.load(f)
+    return {name: _expand_hierarchy(entries) for name, entries in data.items()}
+
+_hiers_path = HIERARCHIES_FILE if os.path.exists(HIERARCHIES_FILE) else EXAMPLE_FILE
+HIERARCHIES = _load_hierarchies(_hiers_path)
 PORT_COMBO = _cfg.get("port_combo", {20129: "nvidia-start", 20133: "nvidia-vision"})
 # json keys are strings, normalize
 PORT_COMBO = {int(k): v for k, v in PORT_COMBO.items()}
