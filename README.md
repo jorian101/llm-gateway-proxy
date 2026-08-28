@@ -58,6 +58,21 @@ cp .env.example .env                            # fill GATEWAY_API_KEY
 - Disabled-model detection (404 / model not found) with TTL and retry to next in hierarchy, never hang (60s timeout, 2 retries before first byte).
 - `GET /status` shows `connections`, `disabled_models`, `inflight_count`. `GET /logs` shows last 80 entries. `GET /health` per port.
 
+## Model hierarchy (edit without touching code)
+
+The pick order per combo lives in JSON, not `server.py`. Edit `proxy/hierarchies.json` —
+one entry per model, `conns` lists the config aliases it can use:
+
+```json
+{ "model": "nvidia/z-ai/glm-5.2", "weight": 90, "conns": ["nim-1", "nim-2", "nim-3"] }
+```
+
+- **Add a model**: new entry in the combo of your choice (`nvidia-start` / `nvidia-vision`), higher `weight` = picked sooner.
+- **Remove a model**: delete its entry(ies).
+- If `hierarchies.json` is missing the proxy falls back to `proxy/hierarchies.example.json`.
+- Aliases come from `proxy/config.json` (`nim-1..3`, `openrouter`, `groq`, `gemini-1/2`, `mistral`).
+- Restart the proxy after editing (`./scripts/start.sh`).
+
 ## OpenCode integration
 
 ```bash
