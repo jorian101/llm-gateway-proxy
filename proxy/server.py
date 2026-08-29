@@ -23,6 +23,7 @@ if os.path.exists(CONFIG_PATH):
 
 TARGET = _cfg.get("target", DEFAULT_TARGET)
 API_KEY = _cfg.get("api_key", DEFAULT_API_KEY)
+ADMIN_KEY = _cfg.get("admin_key")
 
 NVIDIA_CONNS = _cfg.get("nvidia_conns", {
     "nim-1": "<CONN_ID_1>",
@@ -332,12 +333,17 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         if self.path == '/logs': return self._handle_logs()
         if self.path == '/health': return self._handle_health()
         if self.path == '/status': return self._handle_status()
+        if self.path.startswith('/admin/'): return self._handle_admin()
         self._forward_request('POST')
     def do_GET(self):
         if self.path == '/logs': return self._handle_logs()
         if self.path == '/health': return self._handle_health()
         if self.path == '/status': return self._handle_status()
+        if self.path.startswith('/admin/'): return self._handle_admin()
         self._forward_request('GET')
+    def do_PATCH(self):
+        if self.path.startswith('/admin/'): return self._handle_admin()
+        self._send_json(501, {"error": "unsupported method"})
     def _handle_health(self):
         _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
@@ -365,6 +371,196 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         _maybe_reload_hierarchies()
         with _logs_lock: logs = _recent_logs[-80:]
         self._send_json(200, {"logs": logs})
+
+    def _handle_admin(self):
+        if ADMIN_KEY is None:
+            self._send_json(401, {"error": "admin disabled: set admin_key in config.json"})
+            return
+        if self.headers.get('X-Admin-Key') != ADMIN_KEY:
+            self._send_json(401, {"error": "invalid admin key"})
+            return
+
+        path = self.path
+        if self.command == 'GET' and path == '/admin/hierarchy':
+            self._admin_get_hierarchy()
+        elif self.command == 'POST' and path == '/admin/hierarchy':
+            self._admin_replace_hierarchy()
+        elif self.command == 'PATCH' and path == '/admin/hierarchy':
+            self._admin_patch_hierarchy()
+        else:
+            self._send_json(404, {"error": "admin endpoint not found"})
+
+    def _admin_get_hierarchy(self):
+        """Return current hierarchy in compact format."""
+        compact = self._build_compact_hierarchy()
+        self._send_json(200, compact)
+
+    def _build_compact_hierarchy(self):
+        """Rebuild compact format from expanded HIERARCHIES."""
+        hiers = _get_hierarchies()
+        result = {}
+        for combo, entries in hiers.items():
+            # Group by (model, weight) and collect conns
+            grouped = {}
+            for provider, conn_id, model, weight in entries:
+                alias = _conn_id_to_alias.get(conn_id, conn_id)
+                key = (model, weight)
+                grouped.setdefault(key, []).append(alias)
+            result[combo] = [
+                {"model": model, "weight": weight, "conns": sorted(conns)}
+                for (model, weight), conns in grouped.items()
+            ]
+        return result
+
+    def _admin_replace_hierarchy(self):
+        """Replace hierarchy completely from request body."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_json(400, {"error": "empty body"})
+            return
+        try:
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+        except Exception as e:
+            self._send_json(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        if not self._validate_hierarchy(data):
+            self._send_json(400, {"error": "invalid hierarchy format"})
+            return
+
+        # Write to file and reload
+        try:
+            with open(HIERARCHIES_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            _maybe_reload_hierarchies()
+            compact = self._build_compact_hierarchy()
+            self._send_json(200, {"status": "ok", "hierarchy": compact})
+            _add_log("INFO", f"hierarchy replaced via admin API: {sum(len(v) for v in _get_hierarchies().values())} models")
+        except Exception as e:
+            _add_log("ERROR", f"admin replace failed: {e}")
+            self._send_json(500, {"error": str(e)})
+
+    def _admin_patch_hierarchy(self):
+        """Incremental updates to hierarchy."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_json(400, {"error": "empty body"})
+            return
+        try:
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+        except Exception as e:
+            self._send_json(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        ops = data.get('ops', [])
+        if not isinstance(ops, list):
+            self._send_json(400, {"error": "ops must be array"})
+            return
+
+        # Load current compact
+        compact = self._build_compact_hierarchy()
+
+        for op in ops:
+            op_type = op.get('op')
+            combo = op.get('combo')
+            if combo not in compact:
+                self._send_json(400, {"error": f"unknown combo: {combo}"})
+                return
+
+            if op_type == 'add_model':
+                model = op.get('model')
+                weight = op.get('weight')
+                conns = op.get('conns', [])
+                if not model or weight is None or not conns:
+                    self._send_json(400, {"error": "add_model requires model, weight, conns"})
+                    return
+                for c in conns:
+                    if c not in CONN_BY_ALIAS:
+                        self._send_json(400, {"error": f"unknown conn alias: {c}"})
+                        return
+                compact[combo].append({"model": model, "weight": weight, "conns": conns})
+
+            elif op_type == 'remove_model':
+                model = op.get('model')
+                if not model:
+                    self._send_json(400, {"error": "remove_model requires model"})
+                    return
+                compact[combo] = [e for e in compact[combo] if e['model'] != model]
+
+            elif op_type == 'set_weight':
+                model = op.get('model')
+                weight = op.get('weight')
+                if not model or weight is None:
+                    self._send_json(400, {"error": "set_weight requires model, weight"})
+                    return
+                found = False
+                for e in compact[combo]:
+                    if e['model'] == model:
+                        e['weight'] = weight
+                        found = True
+                        break
+                if not found:
+                    self._send_json(404, {"error": f"model not found: {model}"})
+                    return
+
+            elif op_type == 'set_conns':
+                model = op.get('model')
+                conns = op.get('conns', [])
+                if not model or not conns:
+                    self._send_json(400, {"error": "set_conns requires model, conns"})
+                    return
+                for c in conns:
+                    if c not in CONN_BY_ALIAS:
+                        self._send_json(400, {"error": f"unknown conn alias: {c}"})
+                        return
+                found = False
+                for e in compact[combo]:
+                    if e['model'] == model:
+                        e['conns'] = conns
+                        found = True
+                        break
+                if not found:
+                    self._send_json(404, {"error": f"model not found: {model}"})
+                    return
+
+            else:
+                self._send_json(400, {"error": f"unknown op: {op_type}"})
+                return
+
+        # Write and reload
+        try:
+            with open(HIERARCHIES_FILE, 'w') as f:
+                json.dump(compact, f, indent=2)
+            _maybe_reload_hierarchies()
+            new_compact = self._build_compact_hierarchy()
+            self._send_json(200, {"status": "ok", "hierarchy": new_compact})
+            _add_log("INFO", f"hierarchy patched via admin API: {sum(len(v) for v in _get_hierarchies().values())} models")
+        except Exception as e:
+            _add_log("ERROR", f"admin patch failed: {e}")
+            self._send_json(500, {"error": str(e)})
+
+    def _validate_hierarchy(self, data):
+        if not isinstance(data, dict):
+            return False
+        for combo, entries in data.items():
+            if combo not in ('nvidia-start', 'nvidia-vision'):
+                return False
+            if not isinstance(entries, list):
+                return False
+            for e in entries:
+                if not isinstance(e, dict):
+                    return False
+                if 'model' not in e or 'weight' not in e or 'conns' not in e:
+                    return False
+                if not isinstance(e['conns'], list):
+                    return False
+                for c in e['conns']:
+                    if c not in CONN_BY_ALIAS:
+                        return False
+        return True
+
     def log_message(self, *args): pass
 
 def run_proxy(port):
