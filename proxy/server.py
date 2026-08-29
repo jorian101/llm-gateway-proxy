@@ -23,6 +23,7 @@ if os.path.exists(CONFIG_PATH):
 
 TARGET = _cfg.get("target", DEFAULT_TARGET)
 API_KEY = _cfg.get("api_key", DEFAULT_API_KEY)
+ADMIN_KEY = _cfg.get("admin_key")
 
 NVIDIA_CONNS = _cfg.get("nvidia_conns", {
     "nim-1": "<CONN_ID_1>",
@@ -40,78 +41,33 @@ VISION_CONNS = _cfg.get("vision_conns", {
 _http_session = requests.Session()
 _http_session.headers.update({"Connection": "keep-alive"})
 
-# 5 top models
-NVIDIA_HIERARCHY = [
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/moonshotai/kimi-k3", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 95),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/z-ai/glm-5.2", 90),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/minimaxai/minimax-m3", 80),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-ultra-550b-a55b", 70),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/moonshotai/kimi-k3", 60),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-pro-0813", 60),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/deepseek-ai/deepseek-v4-flash-0731", 55),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/z-ai/glm-5.2", 50),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/minimaxai/minimax-m3", 40),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-super-120b-a12b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 30),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/openai/gpt-oss-120b", 30),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/mistralai/mistral-large-3-675b-instruct-2512", 30),
-    # Externos solo si >3 sesiones y wait falla
-    ("openrouter", VISION_CONNS["openrouter"], "openrouter/auto", 20),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-scout-17b-16e-instruct", 15),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-maverick-17b-128e-instruct", 14),
-    ("gemini", VISION_CONNS["gemini-1"], "gemini/gemini-2.5-flash", 10),
-    ("gemini", VISION_CONNS["gemini-2"], "gemini/gemini-3.5-flash", 9),
-    ("mistral", VISION_CONNS["mistral"], "mistral/pixtral-12b-2409", 8),
-]
+# Hierarchies loaded from proxy/hierarchies.json (gitignored) if present,
+# else fall back to proxy/hierarchies.example.json (committed). Compact format:
+#   { "nvidia-start": [ { "model": "...", "weight": 90, "conns": ["nim-1","nim-2","nim-3"] }, ... ] }
+# Each entry expands to one tuple per conn alias. Aliases map to conn IDs via
+# NVIDIA_CONNS / VISION_CONNS. To add/remove a model, edit hierarchies.json.
+HIERARCHIES_FILE = os.path.join(os.path.dirname(__file__), "hierarchies.json")
+EXAMPLE_FILE = os.path.join(os.path.dirname(__file__), "hierarchies.example.json")
 
-VISION_HIERARCHY = [
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/meta/llama-3.2-90b-vision-instruct", 100),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", 95),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-1"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-2"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/meta/llama-3.2-11b-vision-instruct", 80),
-    ("nvidia", NVIDIA_CONNS["nim-3"], "nvidia/nvidia/nemotron-nano-12b-v2-vl", 75),
-    ("openrouter", VISION_CONNS["openrouter"], "openrouter/auto", 50),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-scout-17b-16e-instruct", 40),
-    ("groq", VISION_CONNS["groq"], "meta-llama/llama-4-maverick-17b-128e-instruct", 35),
-    ("gemini", VISION_CONNS["gemini-1"], "gemini/gemini-2.5-flash", 30),
-    ("gemini", VISION_CONNS["gemini-2"], "gemini/gemini-3.5-flash", 25),
-    ("mistral", VISION_CONNS["mistral"], "mistral/pixtral-12b-2409", 20),
-]
+CONN_BY_ALIAS = {**NVIDIA_CONNS, **VISION_CONNS}
 
-HIERARCHIES = {"nvidia-start": NVIDIA_HIERARCHY, "nvidia-vision": VISION_HIERARCHY}
+def _provider_for_alias(alias):
+    return "nvidia" if alias.startswith("nim-") else alias.split("-")[0]
+
+def _expand_hierarchy(entries):
+    out = []
+    for e in entries:
+        for alias in e["conns"]:
+            out.append((_provider_for_alias(alias), CONN_BY_ALIAS[alias], e["model"], e["weight"]))
+    return out
+
+def _load_hierarchies(path):
+    with open(path) as f: data = json.load(f)
+    return {name: _expand_hierarchy(entries) for name, entries in data.items()}
+
+_hiers_path = HIERARCHIES_FILE if os.path.exists(HIERARCHIES_FILE) else EXAMPLE_FILE
+HIERARCHIES = _load_hierarchies(_hiers_path)
+_hierarchies_mtime = os.path.getmtime(_hiers_path) if os.path.exists(_hiers_path) else 0
 PORT_COMBO = _cfg.get("port_combo", {20129: "nvidia-start", 20133: "nvidia-vision"})
 # json keys are strings, normalize
 PORT_COMBO = {int(k): v for k, v in PORT_COMBO.items()}
@@ -126,6 +82,9 @@ _disabled = {}  # {model_key: (ts, reason)}
 DISABLED_TTL = 600
 WAIT_SHORT_SEC = 3  # wait for nvidia slot before falling to externo
 EXTERNAL_PROVIDERS = {"openrouter", "groq", "gemini", "mistral"}
+
+# Hierarchy hot-reload
+_hierarchies_lock = threading.RLock()
 _logs_lock = threading.RLock()
 _recent_logs = []
 _start_time = time.time()
@@ -154,14 +113,50 @@ def _mark_disabled(key, reason):
         _disabled[key] = (time.time(), reason)
     _add_log("WARN", f"DISABLED {key} reason={reason} ttl={DISABLED_TTL}s")
 
-def pick_free_connection(combo, tried=None):
+def _get_hierarchies():
+    """Thread-safe getter for current hierarchies."""
+    with _hierarchies_lock:
+        return HIERARCHIES
+
+def _maybe_reload_hierarchies():
+    """Check if hierarchies file changed and reload atomically."""
+    global HIERARCHIES, _hierarchies_mtime
+    try:
+        mtime = os.path.getmtime(_hiers_path) if os.path.exists(_hiers_path) else 0
+    except OSError:
+        return
+    if mtime != _hierarchies_mtime:
+        try:
+            new_hiers = _load_hierarchies(_hiers_path)
+            with _hierarchies_lock:
+                HIERARCHIES = new_hiers
+            _hierarchies_mtime = mtime
+            total = sum(len(v) for v in new_hiers.values())
+            _add_log("INFO", f"hierarchy reloaded from {_hiers_path}: {total} models")
+        except Exception as e:
+            _add_log("ERROR", f"hierarchy reload failed: {e}")
+
+def pick_free_connection(combo, tried=None, preferred_model=None, max_weight=None):
     tried = tried or set()
-    hierarchy = HIERARCHIES.get(combo, [])
+    hierarchy = _get_hierarchies().get(combo, [])
+
+    # Apply max_weight filter if specified
+    if max_weight is not None:
+        hierarchy = [h for h in hierarchy if h[3] <= max_weight]
+
+    # If preferred_model specified and exists in hierarchy, prioritize it
+    preferred_entry = None
+    if preferred_model:
+        for entry in hierarchy:
+            if entry[2] == preferred_model:
+                preferred_entry = entry
+                break
+
     # first pass: nvidia only, skip disabled and tried and busy
-    def find(nvidia_only):
+    def find(nvidia_only, entries):
         with _inflight_lock:
             busy = set(_inflight.keys())
-        for provider, conn_id, model, weight in hierarchy:
+        for provider, conn_id, model, weight in entries:
             if nvidia_only and provider in EXTERNAL_PROVIDERS: continue
             if not nvidia_only and provider not in EXTERNAL_PROVIDERS: continue
             key = _model_key(provider, conn_id, model)
@@ -170,26 +165,33 @@ def pick_free_connection(combo, tried=None):
             if conn_id in busy: continue
             return conn_id, model, provider, key
         return None
+
+    # Build ordered hierarchy: preferred first (if nvidia), then rest
+    nvidia_entries = [h for h in hierarchy if h[0] not in EXTERNAL_PROVIDERS]
+    externo_entries = [h for h in hierarchy if h[0] in EXTERNAL_PROVIDERS]
+
+    if preferred_entry and preferred_entry in nvidia_entries:
+        nvidia_entries = [preferred_entry] + [e for e in nvidia_entries if e != preferred_entry]
+
     # nvidia first
-    r = find(nvidia_only=True)
+    r = find(True, nvidia_entries)
     if r: return r
     # no nvidia free: wait short for nvidia slot
     deadline = time.time() + WAIT_SHORT_SEC
     while time.time() < deadline:
         time.sleep(0.5)
-        r = find(nvidia_only=True)
+        r = find(True, nvidia_entries)
         if r:
             _add_log("INFO", f"WAIT nvidia slot freed for {combo} -> {r[1]}")
             return r
     # still none, try externo if free
-    r = find(nvidia_only=False)
+    r = find(False, externo_entries)
     if r:
         with _inflight_lock:
             nvidia_busy = sum(1 for cid in _inflight if _conn_id_to_alias.get(cid) in NVIDIA_CONNS)
         if nvidia_busy >= 3:
             _add_log("INFO", f"FALLBACK externo {combo} -> {r[1]} (nvidia full)")
             return r
-        # if we have <3 nvidia busy but still no nvidia model free (disabled), also fallback
         _add_log("INFO", f"FALLBACK externo {combo} -> {r[1]} (nvidia disabled/busy)")
         return r
     return None
@@ -215,6 +217,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
     def _get_combo_for_port(self): return PORT_COMBO.get(self.server.server_port, "nvidia-start")
     def _get_session_id(self): return self.headers.get('X-Session-Id') or self.headers.get('X-Session-ID') or f"anon-{uuid.uuid4().hex[:8]}"
     def _forward_request(self, method):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
         session_id = self._get_session_id()
         content_length = int(self.headers.get('Content-Length', 0)) if method == 'POST' else 0
@@ -225,8 +228,21 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
             except: pass
         tried = set()
         last_err = None
+        # Extract per-request overrides (compatible with Hermes /v1/runs style)
+        preferred_model = None
+        max_weight = None
+        if method == 'POST' and body0:
+            try:
+                req_body = json.loads(body0)
+                preferred_model = req_body.get('preferred_model')
+                max_weight = req_body.get('max_weight')
+            except:
+                pass
+        if preferred_model or max_weight is not None:
+            _add_log("INFO", f"OVERRIDE preferred_model={preferred_model} max_weight={max_weight}")
+
         for attempt in range(3):
-            picked = pick_free_connection(combo, tried)
+            picked = pick_free_connection(combo, tried, preferred_model, max_weight)
             if not picked:
                 self._send_json(503, {"error": {"message": f"All connections busy for {combo}. Retry shortly.", "type": "all_connections_busy", "code": "ALL_BUSY", "retry_after": 3}}, headers={"Retry-After": "3", "X-Combo": combo, "X-Inflight-Count": str(len(_inflight))})
                 return
@@ -350,19 +366,26 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         if self.path == '/logs': return self._handle_logs()
         if self.path == '/health': return self._handle_health()
         if self.path == '/status': return self._handle_status()
+        if self.path.startswith('/admin/'): return self._handle_admin()
         self._forward_request('POST')
     def do_GET(self):
         if self.path == '/logs': return self._handle_logs()
         if self.path == '/health': return self._handle_health()
         if self.path == '/status': return self._handle_status()
+        if self.path.startswith('/admin/'): return self._handle_admin()
         self._forward_request('GET')
+    def do_PATCH(self):
+        if self.path.startswith('/admin/'): return self._handle_admin()
+        self._send_json(501, {"error": "unsupported method"})
     def _handle_health(self):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
         with _inflight_lock: c = len(_inflight)
         self._send_json(200, {"status": "ok", "combo": combo, "inflight_connections": c, "max_nvidia_connections": len(NVIDIA_CONNS), "uptime_sec": round(time.time() - _start_time, 1), "timestamp": time.time()})
     def _handle_status(self):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
-        hierarchy = HIERARCHIES.get(combo, [])
+        hierarchy = _get_hierarchies().get(combo, [])
         with _inflight_lock: inflight_copy = dict(_inflight)
         with _disabled_lock: disabled_copy = dict(_disabled)
         now = time.time()
@@ -378,8 +401,199 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         disabled_list = [{"key": k, "since_sec": round(now-ts,1), "reason": r[:120]} for k,(ts,r) in disabled_copy.items() if now-ts < DISABLED_TTL]
         self._send_json(200, {"combo": combo, "uptime_sec": round(time.time()-_start_time,1), "timestamp": now, "connections": connections, "models_in_use": {info["model"]: list(inflight_copy.values()).count(info) for info in inflight_copy.values()}, "hierarchy_size": len(hierarchy), "disabled_models": disabled_list, "inflight_count": len(inflight_copy)})
     def _handle_logs(self):
+        _maybe_reload_hierarchies()
         with _logs_lock: logs = _recent_logs[-80:]
         self._send_json(200, {"logs": logs})
+
+    def _handle_admin(self):
+        if ADMIN_KEY is None:
+            self._send_json(401, {"error": "admin disabled: set admin_key in config.json"})
+            return
+        if self.headers.get('X-Admin-Key') != ADMIN_KEY:
+            self._send_json(401, {"error": "invalid admin key"})
+            return
+
+        path = self.path
+        if self.command == 'GET' and path == '/admin/hierarchy':
+            self._admin_get_hierarchy()
+        elif self.command == 'POST' and path == '/admin/hierarchy':
+            self._admin_replace_hierarchy()
+        elif self.command == 'PATCH' and path == '/admin/hierarchy':
+            self._admin_patch_hierarchy()
+        else:
+            self._send_json(404, {"error": "admin endpoint not found"})
+
+    def _admin_get_hierarchy(self):
+        """Return current hierarchy in compact format."""
+        compact = self._build_compact_hierarchy()
+        self._send_json(200, compact)
+
+    def _build_compact_hierarchy(self):
+        """Rebuild compact format from expanded HIERARCHIES."""
+        hiers = _get_hierarchies()
+        result = {}
+        for combo, entries in hiers.items():
+            # Group by (model, weight) and collect conns
+            grouped = {}
+            for provider, conn_id, model, weight in entries:
+                alias = _conn_id_to_alias.get(conn_id, conn_id)
+                key = (model, weight)
+                grouped.setdefault(key, []).append(alias)
+            result[combo] = [
+                {"model": model, "weight": weight, "conns": sorted(conns)}
+                for (model, weight), conns in grouped.items()
+            ]
+        return result
+
+    def _admin_replace_hierarchy(self):
+        """Replace hierarchy completely from request body."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_json(400, {"error": "empty body"})
+            return
+        try:
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+        except Exception as e:
+            self._send_json(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        if not self._validate_hierarchy(data):
+            self._send_json(400, {"error": "invalid hierarchy format"})
+            return
+
+        # Write to file and reload
+        try:
+            with open(HIERARCHIES_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            _maybe_reload_hierarchies()
+            compact = self._build_compact_hierarchy()
+            self._send_json(200, {"status": "ok", "hierarchy": compact})
+            _add_log("INFO", f"hierarchy replaced via admin API: {sum(len(v) for v in _get_hierarchies().values())} models")
+        except Exception as e:
+            _add_log("ERROR", f"admin replace failed: {e}")
+            self._send_json(500, {"error": str(e)})
+
+    def _admin_patch_hierarchy(self):
+        """Incremental updates to hierarchy."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_json(400, {"error": "empty body"})
+            return
+        try:
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+        except Exception as e:
+            self._send_json(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        ops = data.get('ops', [])
+        if not isinstance(ops, list):
+            self._send_json(400, {"error": "ops must be array"})
+            return
+
+        # Load current compact
+        compact = self._build_compact_hierarchy()
+
+        for op in ops:
+            op_type = op.get('op')
+            combo = op.get('combo')
+            if combo not in compact:
+                self._send_json(400, {"error": f"unknown combo: {combo}"})
+                return
+
+            if op_type == 'add_model':
+                model = op.get('model')
+                weight = op.get('weight')
+                conns = op.get('conns', [])
+                if not model or weight is None or not conns:
+                    self._send_json(400, {"error": "add_model requires model, weight, conns"})
+                    return
+                for c in conns:
+                    if c not in CONN_BY_ALIAS:
+                        self._send_json(400, {"error": f"unknown conn alias: {c}"})
+                        return
+                compact[combo].append({"model": model, "weight": weight, "conns": conns})
+
+            elif op_type == 'remove_model':
+                model = op.get('model')
+                if not model:
+                    self._send_json(400, {"error": "remove_model requires model"})
+                    return
+                compact[combo] = [e for e in compact[combo] if e['model'] != model]
+
+            elif op_type == 'set_weight':
+                model = op.get('model')
+                weight = op.get('weight')
+                if not model or weight is None:
+                    self._send_json(400, {"error": "set_weight requires model, weight"})
+                    return
+                found = False
+                for e in compact[combo]:
+                    if e['model'] == model:
+                        e['weight'] = weight
+                        found = True
+                        break
+                if not found:
+                    self._send_json(404, {"error": f"model not found: {model}"})
+                    return
+
+            elif op_type == 'set_conns':
+                model = op.get('model')
+                conns = op.get('conns', [])
+                if not model or not conns:
+                    self._send_json(400, {"error": "set_conns requires model, conns"})
+                    return
+                for c in conns:
+                    if c not in CONN_BY_ALIAS:
+                        self._send_json(400, {"error": f"unknown conn alias: {c}"})
+                        return
+                found = False
+                for e in compact[combo]:
+                    if e['model'] == model:
+                        e['conns'] = conns
+                        found = True
+                        break
+                if not found:
+                    self._send_json(404, {"error": f"model not found: {model}"})
+                    return
+
+            else:
+                self._send_json(400, {"error": f"unknown op: {op_type}"})
+                return
+
+        # Write and reload
+        try:
+            with open(HIERARCHIES_FILE, 'w') as f:
+                json.dump(compact, f, indent=2)
+            _maybe_reload_hierarchies()
+            new_compact = self._build_compact_hierarchy()
+            self._send_json(200, {"status": "ok", "hierarchy": new_compact})
+            _add_log("INFO", f"hierarchy patched via admin API: {sum(len(v) for v in _get_hierarchies().values())} models")
+        except Exception as e:
+            _add_log("ERROR", f"admin patch failed: {e}")
+            self._send_json(500, {"error": str(e)})
+
+    def _validate_hierarchy(self, data):
+        if not isinstance(data, dict):
+            return False
+        for combo, entries in data.items():
+            if combo not in ('nvidia-start', 'nvidia-vision'):
+                return False
+            if not isinstance(entries, list):
+                return False
+            for e in entries:
+                if not isinstance(e, dict):
+                    return False
+                if 'model' not in e or 'weight' not in e or 'conns' not in e:
+                    return False
+                if not isinstance(e['conns'], list):
+                    return False
+                for c in e['conns']:
+                    if c not in CONN_BY_ALIAS:
+                        return False
+        return True
+
     def log_message(self, *args): pass
 
 def run_proxy(port):

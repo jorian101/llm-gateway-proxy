@@ -1,0 +1,243 @@
+{
+  "nvidia-start": [
+    {
+      "model": "nvidia/moonshotai/kimi-k3",
+      "weight": 100,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/deepseek-ai/deepseek-v4-pro-0813",
+      "weight": 100,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/deepseek-ai/deepseek-v4-flash-0731",
+      "weight": 95,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/minimaxai/minimax-m3",
+      "weight": 80,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/moonshotai/kimi-k3",
+      "weight": 60,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/deepseek-ai/deepseek-v4-pro-0813",
+      "weight": 60,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/deepseek-ai/deepseek-v4-flash-0731",
+      "weight": 55,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/minimaxai/minimax-m3",
+      "weight": 40,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+      "weight": 30,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-3-super-120b-a12b",
+      "weight": 30,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "weight": 25,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/openai/gpt-oss-120b",
+      "weight": 25,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/mistralai/mistral-large-3-675b-instruct-2512",
+      "weight": 25,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "openrouter/auto",
+      "weight": 20,
+      "conns": [
+        "openrouter"
+      ]
+    },
+    {
+      "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+      "weight": 15,
+      "conns": [
+        "groq"
+      ]
+    },
+    {
+      "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+      "weight": 14,
+      "conns": [
+        "groq"
+      ]
+    },
+    {
+      "model": "gemini/gemini-2.5-flash",
+      "weight": 10,
+      "conns": [
+        "gemini-1"
+      ]
+    },
+    {
+      "model": "gemini/gemini-3.5-flash",
+      "weight": 9,
+      "conns": [
+        "gemini-2"
+      ]
+    },
+    {
+      "model": "mistral/pixtral-12b-2409",
+      "weight": 8,
+      "conns": [
+        "mistral"
+      ]
+    }
+  ],
+  "nvidia-vision": [
+    {
+      "model": "nvidia/meta/llama-3.2-90b-vision-instruct",
+      "weight": 100,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "weight": 95,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/meta/llama-3.2-11b-vision-instruct",
+      "weight": 80,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "nvidia/nvidia/nemotron-nano-12b-v2-vl",
+      "weight": 75,
+      "conns": [
+        "nim-1",
+        "nim-2",
+        "nim-3"
+      ]
+    },
+    {
+      "model": "openrouter/auto",
+      "weight": 50,
+      "conns": [
+        "openrouter"
+      ]
+    },
+    {
+      "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+      "weight": 40,
+      "conns": [
+        "groq"
+      ]
+    },
+    {
+      "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+      "weight": 35,
+      "conns": [
+        "groq"
+      ]
+    },
+    {
+      "model": "gemini/gemini-2.5-flash",
+      "weight": 30,
+      "conns": [
+        "gemini-1"
+      ]
+    },
+    {
+      "model": "gemini/gemini-3.5-flash",
+      "weight": 25,
+      "conns": [
+        "gemini-2"
+      ]
+    },
+    {
+      "model": "mistral/pixtral-12b-2409",
+      "weight": 20,
+      "conns": [
+        "mistral"
+      ]
+    }
+  ]
+}

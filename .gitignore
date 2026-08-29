@@ -1,5 +1,6 @@
 # secrets - never commit
 proxy/config.json
+proxy/hierarchies.json
 seed/seed.json
 .env
 
