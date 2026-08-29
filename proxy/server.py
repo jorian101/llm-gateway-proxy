@@ -136,14 +136,27 @@ def _maybe_reload_hierarchies():
         except Exception as e:
             _add_log("ERROR", f"hierarchy reload failed: {e}")
 
-def pick_free_connection(combo, tried=None):
+def pick_free_connection(combo, tried=None, preferred_model=None, max_weight=None):
     tried = tried or set()
     hierarchy = _get_hierarchies().get(combo, [])
+
+    # Apply max_weight filter if specified
+    if max_weight is not None:
+        hierarchy = [h for h in hierarchy if h[3] <= max_weight]
+
+    # If preferred_model specified and exists in hierarchy, prioritize it
+    preferred_entry = None
+    if preferred_model:
+        for entry in hierarchy:
+            if entry[2] == preferred_model:
+                preferred_entry = entry
+                break
+
     # first pass: nvidia only, skip disabled and tried and busy
-    def find(nvidia_only):
+    def find(nvidia_only, entries):
         with _inflight_lock:
             busy = set(_inflight.keys())
-        for provider, conn_id, model, weight in hierarchy:
+        for provider, conn_id, model, weight in entries:
             if nvidia_only and provider in EXTERNAL_PROVIDERS: continue
             if not nvidia_only and provider not in EXTERNAL_PROVIDERS: continue
             key = _model_key(provider, conn_id, model)
@@ -152,26 +165,33 @@ def pick_free_connection(combo, tried=None):
             if conn_id in busy: continue
             return conn_id, model, provider, key
         return None
+
+    # Build ordered hierarchy: preferred first (if nvidia), then rest
+    nvidia_entries = [h for h in hierarchy if h[0] not in EXTERNAL_PROVIDERS]
+    externo_entries = [h for h in hierarchy if h[0] in EXTERNAL_PROVIDERS]
+
+    if preferred_entry and preferred_entry in nvidia_entries:
+        nvidia_entries = [preferred_entry] + [e for e in nvidia_entries if e != preferred_entry]
+
     # nvidia first
-    r = find(nvidia_only=True)
+    r = find(True, nvidia_entries)
     if r: return r
     # no nvidia free: wait short for nvidia slot
     deadline = time.time() + WAIT_SHORT_SEC
     while time.time() < deadline:
         time.sleep(0.5)
-        r = find(nvidia_only=True)
+        r = find(True, nvidia_entries)
         if r:
             _add_log("INFO", f"WAIT nvidia slot freed for {combo} -> {r[1]}")
             return r
     # still none, try externo if free
-    r = find(nvidia_only=False)
+    r = find(False, externo_entries)
     if r:
         with _inflight_lock:
             nvidia_busy = sum(1 for cid in _inflight if _conn_id_to_alias.get(cid) in NVIDIA_CONNS)
         if nvidia_busy >= 3:
             _add_log("INFO", f"FALLBACK externo {combo} -> {r[1]} (nvidia full)")
             return r
-        # if we have <3 nvidia busy but still no nvidia model free (disabled), also fallback
         _add_log("INFO", f"FALLBACK externo {combo} -> {r[1]} (nvidia disabled/busy)")
         return r
     return None
@@ -208,8 +228,21 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
             except: pass
         tried = set()
         last_err = None
+        # Extract per-request overrides (compatible with Hermes /v1/runs style)
+        preferred_model = None
+        max_weight = None
+        if method == 'POST' and body0:
+            try:
+                req_body = json.loads(body0)
+                preferred_model = req_body.get('preferred_model')
+                max_weight = req_body.get('max_weight')
+            except:
+                pass
+        if preferred_model or max_weight is not None:
+            _add_log("INFO", f"OVERRIDE preferred_model={preferred_model} max_weight={max_weight}")
+
         for attempt in range(3):
-            picked = pick_free_connection(combo, tried)
+            picked = pick_free_connection(combo, tried, preferred_model, max_weight)
             if not picked:
                 self._send_json(503, {"error": {"message": f"All connections busy for {combo}. Retry shortly.", "type": "all_connections_busy", "code": "ALL_BUSY", "retry_after": 3}}, headers={"Retry-After": "3", "X-Combo": combo, "X-Inflight-Count": str(len(_inflight))})
                 return
