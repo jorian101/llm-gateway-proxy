@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
 Gateway Proxy - Dual Combo (example)
-- 5 top models: kimi-k3 → deepseek-v4-pro-0813 → deepseek-v4-flash-0731 → glm-5.2 → minimax-m3
+- Top models (by weight): kimi-k3 → deepseek-v4-pro-0813 → deepseek-v4-flash-0731 → minimax-m3
+  → nemotron-3-ultra-550b (last nvidia, weight 30) → externals (openrouter, groq, gemini, mistral)
 - Shared _inflight per conn_id (1 per nvidia account), nvidia-first, 4th session waits
 - _disabled with TTL, retry before first byte, never hang
-- Config via proxy.config.json if present
+- Hierarchy loaded from proxy/hierarchies.json (or .example.json fallback); hot reload on mtime change
+- Admin API: GET/POST/PATCH /admin/hierarchy (X-Admin-Key auth)
+- Per-request override: preferred_model, max_weight (Hermes /v1/runs compatible)
+- Config via proxy/config.json if present
 """
 import os, json, logging, threading, time, uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -225,7 +229,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         wants_stream0 = False
         if method == 'POST' and body0:
             try: wants_stream0 = json.loads(body0).get('stream', False) == True
-            except: pass
+            except Exception as e: _add_log("DEBUG", f"stream parse failed: {e}")
         tried = set()
         last_err = None
         # Extract per-request overrides (compatible with Hermes /v1/runs style)
@@ -236,8 +240,8 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                 req_body = json.loads(body0)
                 preferred_model = req_body.get('preferred_model')
                 max_weight = req_body.get('max_weight')
-            except:
-                pass
+            except Exception as e:
+                _add_log("DEBUG", f"override parse failed: {e}")
         if preferred_model or max_weight is not None:
             _add_log("INFO", f"OVERRIDE preferred_model={preferred_model} max_weight={max_weight}")
 
@@ -259,7 +263,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                     wants_stream = req.get('stream', False) == True
                     req['model'] = model
                     body = json.dumps(req).encode()
-                except: pass
+                except Exception as e: _add_log("DEBUG", f"body rewrite failed: {e}")
             headers = {k: v for k, v in self.headers.items() if k.lower() not in DROP_HEADERS}
             headers['Authorization'] = f'Bearer {API_KEY}'
             headers['X-Session-Id'] = session_id
@@ -270,7 +274,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                 if resp.status_code >= 400:
                     b = b""
                     try: b = resp.content[:2000]
-                    except: pass
+                    except Exception as e: _add_log("DEBUG", f"error body read failed: {e}")
                     txt = b.decode(errors='ignore').lower()
                     is_model_err = resp.status_code == 404 or "model" in txt and ("not found" in txt or "does not exist" in txt or "no such model" in txt)
                     if is_model_err:
@@ -291,7 +295,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                         for chunk in resp.iter_content(chunk_size=4096):
                             if chunk:
                                 try: self.wfile.write(chunk); self.wfile.flush()
-                                except: break
+                                except (BrokenPipeError, ConnectionResetError): break
                     else:
                         self.wfile.write(resp.content); self.wfile.flush()
                     _add_log("WARN", f"ERROR {combo} {model} {resp.status_code}")
@@ -306,7 +310,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                     for chunk in resp.iter_content(chunk_size=4096):
                         if chunk:
                             try: self.wfile.write(chunk); self.wfile.flush()
-                            except: break
+                            except (BrokenPipeError, ConnectionResetError): break
                 else:
                     self.wfile.write(resp.content); self.wfile.flush()
                 total = time.time() - start_total
@@ -325,7 +329,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                     time.sleep(0.5)
                     continue
                 try: self.send_error(502, str(e))
-                except: pass
+                except Exception as se: _add_log("DEBUG", f"send_error failed: {se}")
                 return
             finally:
                 # release if not already and we succeeded/failed terminally
