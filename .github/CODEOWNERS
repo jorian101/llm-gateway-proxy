@@ -1,0 +1,18 @@
+# CODEOWNERS - required reviewers for changes
+# These users/teams will be requested for review when files they own are modified
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Core proxy server - requires review
+/proxy/server.py @jorian101
+
+# Config templates - requires review
+/proxy/config.example.json @jorian101
+/proxy/hierarchies.example.json @jorian101
+
+# Setup scripts - requires review
+/scripts/setup.sh @jorian101
+/scripts/add-provider.sh @jorian101
+
+# Documentation - optional but nice
+/docs/ @jorian101
+README.md @jorian101
