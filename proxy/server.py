@@ -66,6 +66,7 @@ def _load_hierarchies(path):
 
 _hiers_path = HIERARCHIES_FILE if os.path.exists(HIERARCHIES_FILE) else EXAMPLE_FILE
 HIERARCHIES = _load_hierarchies(_hiers_path)
+_hierarchies_mtime = os.path.getmtime(_hiers_path) if os.path.exists(_hiers_path) else 0
 PORT_COMBO = _cfg.get("port_combo", {20129: "nvidia-start", 20133: "nvidia-vision"})
 # json keys are strings, normalize
 PORT_COMBO = {int(k): v for k, v in PORT_COMBO.items()}
@@ -80,6 +81,9 @@ _disabled = {}  # {model_key: (ts, reason)}
 DISABLED_TTL = 600
 WAIT_SHORT_SEC = 3  # wait for nvidia slot before falling to externo
 EXTERNAL_PROVIDERS = {"openrouter", "groq", "gemini", "mistral"}
+
+# Hierarchy hot-reload
+_hierarchies_lock = threading.RLock()
 _logs_lock = threading.RLock()
 _recent_logs = []
 _start_time = time.time()
@@ -108,9 +112,32 @@ def _mark_disabled(key, reason):
         _disabled[key] = (time.time(), reason)
     _add_log("WARN", f"DISABLED {key} reason={reason} ttl={DISABLED_TTL}s")
 
+def _get_hierarchies():
+    """Thread-safe getter for current hierarchies."""
+    with _hierarchies_lock:
+        return HIERARCHIES
+
+def _maybe_reload_hierarchies():
+    """Check if hierarchies file changed and reload atomically."""
+    global HIERARCHIES, _hierarchies_mtime
+    try:
+        mtime = os.path.getmtime(_hiers_path) if os.path.exists(_hiers_path) else 0
+    except OSError:
+        return
+    if mtime != _hierarchies_mtime:
+        try:
+            new_hiers = _load_hierarchies(_hiers_path)
+            with _hierarchies_lock:
+                HIERARCHIES = new_hiers
+            _hierarchies_mtime = mtime
+            total = sum(len(v) for v in new_hiers.values())
+            _add_log("INFO", f"hierarchy reloaded from {_hiers_path}: {total} models")
+        except Exception as e:
+            _add_log("ERROR", f"hierarchy reload failed: {e}")
+
 def pick_free_connection(combo, tried=None):
     tried = tried or set()
-    hierarchy = HIERARCHIES.get(combo, [])
+    hierarchy = _get_hierarchies().get(combo, [])
     # first pass: nvidia only, skip disabled and tried and busy
     def find(nvidia_only):
         with _inflight_lock:
@@ -169,6 +196,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
     def _get_combo_for_port(self): return PORT_COMBO.get(self.server.server_port, "nvidia-start")
     def _get_session_id(self): return self.headers.get('X-Session-Id') or self.headers.get('X-Session-ID') or f"anon-{uuid.uuid4().hex[:8]}"
     def _forward_request(self, method):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
         session_id = self._get_session_id()
         content_length = int(self.headers.get('Content-Length', 0)) if method == 'POST' else 0
@@ -311,12 +339,14 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         if self.path == '/status': return self._handle_status()
         self._forward_request('GET')
     def _handle_health(self):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
         with _inflight_lock: c = len(_inflight)
         self._send_json(200, {"status": "ok", "combo": combo, "inflight_connections": c, "max_nvidia_connections": len(NVIDIA_CONNS), "uptime_sec": round(time.time() - _start_time, 1), "timestamp": time.time()})
     def _handle_status(self):
+        _maybe_reload_hierarchies()
         combo = self._get_combo_for_port()
-        hierarchy = HIERARCHIES.get(combo, [])
+        hierarchy = _get_hierarchies().get(combo, [])
         with _inflight_lock: inflight_copy = dict(_inflight)
         with _disabled_lock: disabled_copy = dict(_disabled)
         now = time.time()
@@ -332,6 +362,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         disabled_list = [{"key": k, "since_sec": round(now-ts,1), "reason": r[:120]} for k,(ts,r) in disabled_copy.items() if now-ts < DISABLED_TTL]
         self._send_json(200, {"combo": combo, "uptime_sec": round(time.time()-_start_time,1), "timestamp": now, "connections": connections, "models_in_use": {info["model"]: list(inflight_copy.values()).count(info) for info in inflight_copy.values()}, "hierarchy_size": len(hierarchy), "disabled_models": disabled_list, "inflight_count": len(inflight_copy)})
     def _handle_logs(self):
+        _maybe_reload_hierarchies()
         with _logs_lock: logs = _recent_logs[-80:]
         self._send_json(200, {"logs": logs})
     def log_message(self, *args): pass
