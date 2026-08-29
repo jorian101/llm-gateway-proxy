@@ -245,6 +245,9 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
         if preferred_model or max_weight is not None:
             _add_log("INFO", f"OVERRIDE preferred_model={preferred_model} max_weight={max_weight}")
 
+        # Track last error for final fallback
+        last_err = None
+
         for attempt in range(3):
             picked = pick_free_connection(combo, tried, preferred_model, max_weight)
             if not picked:
@@ -254,6 +257,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
             tried.add(key)
             if not acquire_connection(conn_id, model, session_id, combo, provider):
                 continue
+
             # build body with model
             body = body0
             wants_stream = wants_stream0
@@ -264,12 +268,17 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                     req['model'] = model
                     body = json.dumps(req).encode()
                 except Exception as e: _add_log("DEBUG", f"body rewrite failed: {e}")
+
             headers = {k: v for k, v in self.headers.items() if k.lower() not in DROP_HEADERS}
             headers['Authorization'] = f'Bearer {API_KEY}'
             headers['X-Session-Id'] = session_id
             start_total = time.time()
+
+            # Flags to track retry state and avoid double-release
+            retrying = False
             try:
                 resp = _http_session.request(method, f"{TARGET}{self.path}", data=body, headers=headers, timeout=60, stream=wants_stream)
+
                 # detect model disabled before streaming
                 if resp.status_code >= 400:
                     b = b""
@@ -280,7 +289,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                     if is_model_err:
                         _mark_disabled(key, f"{resp.status_code} {txt[:120]}")
                         _add_log("WARN", f"MODEL ERROR {combo} {model} -> next (attempt {attempt+1})")
-                        # release and retry
+                        # release and retry with next model
                         release_connection(conn_id)
                         last_err = (resp.status_code, b)
                         time.sleep(0.3)
@@ -322,7 +331,7 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                 msg = str(e).lower()
                 is_net = "timeout" in msg or "read timed out" in msg or "connection" in msg
                 _add_log("ERROR", f"Proxy error {combo} {model} attempt {attempt+1}: {e}")
-                # if we haven't streamed, retry with next model; else surface
+                # network error: retry with next model if not streaming
                 if is_net and attempt < 2:
                     release_connection(conn_id)
                     # short backoff, don't disable on timeout (rate limit)
@@ -332,31 +341,18 @@ class ComboProxyHandler(BaseHTTPRequestHandler):
                 except Exception as se: _add_log("DEBUG", f"send_error failed: {se}")
                 return
             finally:
-                # release if not already and we succeeded/failed terminally
-                # if we continued (retry), already released
-                # check if still held
-                with _inflight_lock:
-                    if conn_id in _inflight and _inflight[conn_id].get("session") == session_id:
-                        # only release if we are not retrying (retry already released)
-                        # detect retry: if we are in retry path we already returned continue, so this finally would release again
-                        # use flag: if attempt <2 and is_model_err/is_net, we already released, so skip
-                        pass
-                # ensure release on terminal paths
+                # Release connection unless we already did it for a retry
                 if conn_id in _inflight:
-                    # check if session still ours (not race)
                     with _inflight_lock:
+                        # Only release if this session still owns it (not already released by retry path)
                         if conn_id in _inflight and _inflight[conn_id].get("session") == session_id:
-                            # if we are about to retry, we already released; detect by last_err set
-                            # simple: if we are in retry branch we would have continued before reaching here? actually finally always runs
-                            # so need to avoid double release: only release if not continuing
-                            # we detect continuing by checking if we set last_err and will loop
-                            # simpler: release here always, retry loop will re-acquire next
-                            pass
-                release_connection(conn_id)
-                # if we reached here via retry continue, the loop will continue; else return already
-                if last_err and attempt < 2:
-                    continue
-        # if all attempts exhausted
+                            release_connection(conn_id)
+
+            # If we got here without returning/continuing, it's a terminal path
+            # (either success returned, or non-retryable error returned)
+            # The loop will only continue if we explicitly `continue` above
+
+        # all 3 attempts exhausted
         if last_err:
             code, body = last_err
             self._send_json(code, {"error": {"message": body.decode(errors='ignore')[:500], "code": "MODEL_DISABLED"}})
