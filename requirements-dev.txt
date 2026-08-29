@@ -1,0 +1,3 @@
+# Dev dependencies (not required to run the proxy)
+-r proxy/requirements.txt
+pytest>=8.0
